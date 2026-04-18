@@ -1,15 +1,15 @@
 """Deploy the dispersion coefficient regressor to a SageMaker endpoint.
 
-If ``model.joblib`` is < 10 bytes (placeholder) a trivial stub sklearn model
-that returns a constant ``D = 1.0`` per row is trained and uploaded instead.
-The resulting endpoint name is written to SSM parameter
-``/downstream/sagemaker/dispersionEndpoint`` for ``tick-propagator`` to read.
+Uses a custom FastAPI container that implements /ping and /invocations on
+port 8080, bypassing the broken sagemaker_containers sklearn framework image.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import os
+import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
@@ -18,108 +18,135 @@ import boto3
 import joblib
 import numpy as np
 import sagemaker
-from sagemaker.sklearn.model import SKLearnModel
+from sagemaker.model import Model
 from sklearn.dummy import DummyRegressor
 
 SSM_PARAM_NAME = "/downstream/sagemaker/dispersionEndpoint"
-FRAMEWORK_VERSION = "1.4-1"
+DEFAULT_ENDPOINT = "watershed-dispersion-model"
+DEFAULT_INSTANCE = "ml.t2.medium"
+ECR_REPO = "watershed-dispersion"
 
 
 def deploy_endpoint(
     model_path: str = "model.joblib",
-    endpoint_name: str = "downstream-dispersion-model",
-    instance_type: str = "ml.t3.medium",
+    endpoint_name: str = DEFAULT_ENDPOINT,
+    instance_type: str = DEFAULT_INSTANCE,
 ) -> str:
+    role = os.environ.get("SAGEMAKER_ROLE_ARN")
+    if not role:
+        raise SystemExit("SAGEMAKER_ROLE_ARN env var must be set")
+
+    boto_sess = boto3.Session(
+        profile_name=os.environ.get("AWS_PROFILE"),
+        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
+    )
+    sess = sagemaker.Session(boto_session=boto_sess)
+    region = boto_sess.region_name
+    account = boto_sess.client("sts").get_caller_identity()["Account"]
+
+    # Prepare model artifact
     path = Path(model_path)
     if not path.exists() or path.stat().st_size < 10:
-        print(f"Placeholder detected at {path}; training stub DummyRegressor(constant=1.0).")
+        print("Placeholder detected; training stub DummyRegressor.")
         stub = DummyRegressor(strategy="constant", constant=1.0)
         stub.fit(np.zeros((1, 4)), np.array([1.0]))
         joblib.dump(stub, path)
 
-    sess = sagemaker.Session()
-    bucket = sess.default_bucket()
-    role = _resolve_sagemaker_role(sess)
+    # Build and push custom Docker image to ECR
+    image_uri = _build_and_push(boto_sess, account, region, ECR_REPO)
 
+    # Upload model artifact to S3
+    bucket = sess.default_bucket()
     with tempfile.TemporaryDirectory() as tmp:
         tar_path = Path(tmp) / "model.tar.gz"
-        inference_path = Path(tmp) / "inference.py"
-        inference_path.write_text(_INFERENCE_SCRIPT)
         with tarfile.open(tar_path, "w:gz") as tf:
             tf.add(path, arcname="model.joblib")
-            tf.add(inference_path, arcname="inference.py")
-        model_s3 = sess.upload_data(str(tar_path), bucket=bucket, key_prefix="downstream/dispersion")
+        model_s3 = sess.upload_data(
+            str(tar_path), bucket=bucket, key_prefix="downstream/dispersion"
+        )
+    print(f"Model artifact: {model_s3}")
 
-    model = SKLearnModel(
+    # Clean up any previous failed endpoint/config
+    sm = boto_sess.client("sagemaker")
+    for delete in [
+        lambda: sm.delete_endpoint(EndpointName=endpoint_name),
+        lambda: sm.delete_endpoint_config(EndpointConfigName=endpoint_name),
+    ]:
+        try:
+            delete()
+        except Exception:
+            pass
+
+    # Deploy using the custom container
+    model = Model(
+        image_uri=image_uri,
         model_data=model_s3,
         role=role,
-        entry_point="inference.py",
-        framework_version=FRAMEWORK_VERSION,
         sagemaker_session=sess,
     )
+    print(f"Deploying {endpoint_name} on {instance_type} (takes ~10 min)...")
     predictor = model.deploy(
         initial_instance_count=1,
         instance_type=instance_type,
         endpoint_name=endpoint_name,
     )
 
-    _write_ssm_param(endpoint_name)
-    print(f"Deployed endpoint: {predictor.endpoint_name}")
-    return predictor.endpoint_name
-
-
-def _resolve_sagemaker_role(sess: sagemaker.Session) -> str:
-    env_role = os.environ.get("SAGEMAKER_ROLE_ARN")
-    if env_role:
-        return env_role
-    return sagemaker.get_execution_role(sess)
-
-
-def _write_ssm_param(endpoint_name: str) -> None:
-    ssm = boto3.client("ssm")
-    ssm.put_parameter(
+    boto_sess.client("ssm").put_parameter(
         Name=SSM_PARAM_NAME,
         Value=endpoint_name,
         Type="String",
         Overwrite=True,
     )
+    print(f"Deployed endpoint: {endpoint_name}")
+    return endpoint_name
 
 
-_INFERENCE_SCRIPT = '''
-"""SageMaker sklearn container entry point for the dispersion regressor."""
-from __future__ import annotations
+def _build_and_push(boto_sess: boto3.Session, account: str, region: str, repo: str) -> str:
+    ecr = boto_sess.client("ecr")
+    image_uri = f"{account}.dkr.ecr.{region}.amazonaws.com/{repo}:latest"
+    script_dir = Path(__file__).parent
 
-import io
-import os
+    # Create ECR repo if it doesn't exist
+    try:
+        ecr.create_repository(repositoryName=repo)
+        print(f"Created ECR repo: {repo}")
+    except ecr.exceptions.RepositoryAlreadyExistsException:
+        print(f"ECR repo exists: {repo}")
 
-import joblib
-import numpy as np
+    # Docker login
+    token = ecr.get_authorization_token()
+    auth = token["authorizationData"][0]
+    creds = base64.b64decode(auth["authorizationToken"]).decode()
+    user, password = creds.split(":", 1)
+    registry = auth["proxyEndpoint"]
+    subprocess.run(
+        ["docker", "login", "--username", user, "--password-stdin", registry],
+        input=password.encode(),
+        check=True,
+    )
 
-
-def model_fn(model_dir: str):
-    return joblib.load(os.path.join(model_dir, "model.joblib"))
-
-
-def input_fn(body: bytes, content_type: str):
-    if content_type == "text/csv":
-        text = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body
-        return np.loadtxt(io.StringIO(text), delimiter=",").reshape(-1, 4)
-    raise ValueError(f"Unsupported content-type: {content_type}")
-
-
-def predict_fn(data: np.ndarray, model) -> np.ndarray:
-    return np.asarray(model.predict(data), dtype=float).reshape(-1)
-
-
-def output_fn(prediction: np.ndarray, accept: str) -> bytes:
-    return "\\n".join(f"{v:.6g}" for v in prediction).encode("utf-8")
-'''
+    # Build, tag, push
+    print("Building and pushing Docker image...")
+    subprocess.run(
+        [
+            "docker", "buildx", "build",
+            "--platform", "linux/amd64",
+            "--provenance=false",
+            "--sbom=false",
+            "-t", image_uri,
+            "--push",
+            str(script_dir),
+        ],
+        check=True,
+    )
+    print(f"Pushed: {image_uri}")
+    return image_uri
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", default="model.joblib")
-    parser.add_argument("--endpoint-name", default="downstream-dispersion-model")
-    parser.add_argument("--instance-type", default="ml.t3.medium")
+    parser.add_argument("--endpoint-name", default=DEFAULT_ENDPOINT)
+    parser.add_argument("--instance-type", default=DEFAULT_INSTANCE)
     args = parser.parse_args()
     deploy_endpoint(args.model_path, args.endpoint_name, args.instance_type)

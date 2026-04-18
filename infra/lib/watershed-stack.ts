@@ -118,26 +118,7 @@ export class WatershedStack extends Stack {
       pricingPlan: "RequestBasedUsage",
     });
 
-    // Dedicated API key for Amazon Location Service (do NOT reuse the AppSync
-    // API key — that key grants GraphQL access and must not be leaked to the
-    // map-tile request path).
-    const locationApiKey = new location.CfnAPIKey(this, "WatershedLocationApiKey", {
-      keyName: "watershed-location-key",
-      expireTime: Expiration.after(Duration.days(90)).date.toISOString(),
-      restrictions: {
-        allowActions: [
-          "geo:GetMapTile",
-          "geo:GetMapStyleDescriptor",
-          "geo:GetMapSprites",
-          "geo:GetMapGlyphs",
-          "geo:GetMap*",
-        ],
-        allowResources: [
-          `arn:aws:geo:${this.region}:${this.account}:map/${watershedMap.mapName}`,
-        ],
-      },
-    });
-    locationApiKey.addDependency(watershedMap);
+    // Location API key created manually in console (WSParticipantRole lacks geo:CreateKey)
 
     // --- AppSync ---
     const watershedApi = new appsync.GraphqlApi(this, "WatershedApi", {
@@ -443,7 +424,7 @@ export class WatershedStack extends Stack {
     kinesisToAppSyncFn.addEventSource(
       new lambdaEventSources.KinesisEventSource(tickStream, {
         batchSize: 100,
-        maxBatchingWindow: Duration.millis(500),
+        maxBatchingWindow: Duration.seconds(1),
         startingPosition: lambda.StartingPosition.LATEST,
         retryAttempts: 3,
       }),
@@ -502,9 +483,7 @@ export class WatershedStack extends Stack {
     new CfnOutput(this, "aws_location_map_name", {
       value: watershedMap.mapName,
     });
-    new CfnOutput(this, "aws_location_api_key_name", {
-      value: locationApiKey.keyName,
-    });
+
     new CfnOutput(this, "aws_location_place_index", {
       value: watershedPlaces.indexName,
     });
