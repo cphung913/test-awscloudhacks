@@ -319,6 +319,58 @@ def attach_towns(features: list[dict[str, Any]]) -> int:
     return attached
 
 
+def _patch_connectivity_geometric(
+    features: list[dict[str, Any]], threshold_deg: float = 0.05
+) -> None:
+    """Geometrically connect orphaned terminal segments using endpoint proximity.
+
+    Segments excluded by the named-river WHERE filter leave dangling endpoints
+    at river junctions. For each terminal segment (downstream_ids=[]), find the
+    segment whose start coordinate is closest to this segment's end coordinate.
+    If within threshold_deg, wire the connection. Prefers same-river matches.
+    """
+    from collections import defaultdict
+
+    def _end(f: dict[str, Any]) -> tuple[float, float]:
+        return tuple(f["geometry"]["coordinates"][-1])  # type: ignore[return-value]
+
+    def _start(f: dict[str, Any]) -> tuple[float, float]:
+        return tuple(f["geometry"]["coordinates"][0])  # type: ignore[return-value]
+
+    def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
+        return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+    starts_by_river: dict[str, list[tuple[tuple[float, float], str]]] = defaultdict(list)
+    all_starts: list[tuple[tuple[float, float], str]] = []
+    for f in features:
+        name = f["properties"].get("gnis_name") or "unknown"
+        pt = _start(f)
+        sid = f["properties"]["segment_id"]
+        starts_by_river[name].append((pt, sid))
+        all_starts.append((pt, sid))
+
+    fixed = 0
+    for f in features:
+        if f["properties"]["downstream_ids"]:
+            continue
+        end = _end(f)
+        sid = f["properties"]["segment_id"]
+        name = f["properties"].get("gnis_name") or "unknown"
+
+        same = [(d, s) for pt, s in starts_by_river[name] if s != sid and (d := _dist(end, pt)) < threshold_deg]
+        if same:
+            f["properties"]["downstream_ids"] = [min(same)[1]]
+            fixed += 1
+            continue
+
+        cross = [(d, s) for pt, s in all_starts if s != sid and (d := _dist(end, pt)) < threshold_deg]
+        if cross:
+            f["properties"]["downstream_ids"] = [min(cross)[1]]
+            fixed += 1
+
+    print(f"Geometric connectivity patch: fixed {fixed} orphaned segments.")
+
+
 def validate(features: list[dict[str, Any]]) -> None:
     for f in features:
         p = f["properties"]
@@ -445,6 +497,7 @@ def main() -> None:
 
     validate(features)
     attached = attach_towns(features)
+    _patch_connectivity_geometric(features)
     terminal = sum(1 for f in features if not f["properties"]["downstream_ids"])
 
     fc = {"type": "FeatureCollection", "features": features}
