@@ -6,7 +6,7 @@ frontend:
         - npm install
     build:
       commands:
-        - frontend/node_modules/.bin/vite build --root frontend
+        - npm run build:frontend
   artifacts:
     baseDirectory: frontend/dist
     files:
@@ -14,3 +14,4 @@ frontend:
   cache:
     paths:
       - node_modules/**/*
+      - frontend/node_modules/**/*
