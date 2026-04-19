@@ -50,7 +50,7 @@ export function Header() {
           </span>
           <span
             key={tick}
-            className="font-mono text-[12px] tracking-[0.04em] animate-fade-in tabular-nums"
+            className="font-mono text-[12px] tracking-[0.04em] tabular-nums"
             style={{ color: "#e8e4d8" }}
           >
             {tick.toString().padStart(2, "0")}h
