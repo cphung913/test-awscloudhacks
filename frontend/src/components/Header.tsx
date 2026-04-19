@@ -31,7 +31,7 @@ export function Header() {
             className="text-[16px] font-semibold tracking-[0.15em] uppercase"
             style={{ color: "#e8e4d8" }}
           >
-            Downstream · Watershed Spill Model
+            Downstream · Watershed Simulator
           </div>
           <div className="font-mono text-[10px] tracking-[0.08em]" style={{ color: "#7fb2c9" }}>
             v2.3.1 · ref. 40 CFR 300 · session #WS-{sessionId}
@@ -44,23 +44,39 @@ export function Header() {
       {/* Ribbon stats */}
       <div className="flex items-center gap-8">
         <RibbonStat label="BASIN" value={region} />
-        <RibbonStat
-          label="RUN"
-          value={`${tick.toString().padStart(2, "0")}h`}
-        />
-        <RibbonStat
-          label="STATUS"
-          value={`● ${status.toUpperCase()}`}
-          accent={
-            status === "running"
-              ? "#e8b64c"
-              : status === "completed"
-                ? "#7fb2c9"
-                : status === "error"
-                  ? "#c8422b"
-                  : "#e8e4d8"
-          }
-        />
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[9px] tracking-[0.14em]" style={{ color: "#7fb2c9" }}>
+            RUN
+          </span>
+          <span
+            key={tick}
+            className="font-mono text-[12px] tracking-[0.04em] animate-fade-in tabular-nums"
+            style={{ color: "#e8e4d8" }}
+          >
+            {tick.toString().padStart(2, "0")}h
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[9px] tracking-[0.14em]" style={{ color: "#7fb2c9" }}>
+            STATUS
+          </span>
+          <span
+            className="font-mono text-[12px] tracking-[0.04em] flex items-center gap-1"
+            style={{
+              color:
+                status === "running"
+                  ? "#e8b64c"
+                  : status === "completed"
+                    ? "#7fb2c9"
+                    : status === "error"
+                      ? "#c8422b"
+                      : "#e8e4d8",
+            }}
+          >
+            <span className={status === "running" ? "animate-dot-pulse" : ""}>●</span>
+            {status.toUpperCase()}
+          </span>
+        </div>
       </div>
     </header>
   );

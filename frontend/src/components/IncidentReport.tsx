@@ -1,4 +1,5 @@
 import { useSimulationStore } from "@/stores/simulation";
+import { useCountUp } from "@/hooks/useCountUp";
 
 export function IncidentReport() {
   const report = useSimulationStore((s) => s.report);
@@ -7,8 +8,6 @@ export function IncidentReport() {
   const volumeGallons = useSimulationStore((s) => s.config.volumeGallons);
   const totalMitigationCost = useSimulationStore((s) => s.totalMitigationCost);
 
-  // Live cost derived from current tick's town risk map — updates as user scrubs.
-  // Total = cleanup cost (volume + affected pop) + mitigation spend already committed.
   const livePop = Array.from(townRiskMap.values())
     .filter((t) => t.riskLevel !== "CLEAR")
     .reduce((sum, t) => sum + t.population, 0);
@@ -19,6 +18,11 @@ export function IncidentReport() {
   const hasScrubData = townRiskMap.size > 0;
   const totalCost = hasScrubData ? liveCost : (report ? report.estimatedCleanupCost + mitigationSpend : 0);
   const popAtRisk = hasScrubData ? livePop : (report?.populationAtRisk ?? 0);
+
+  const animatedCost = useCountUp(totalCost);
+  const animatedPop = useCountUp(popAtRisk);
+  const animatedCleanup = useCountUp(liveCleanup);
+  const animatedMitigation = useCountUp(mitigationSpend);
 
   if (!report && !hasScrubData) {
     return (
@@ -34,17 +38,18 @@ export function IncidentReport() {
   }
 
   return (
-    <div className="p-5 flex flex-col gap-5">
+    <div className="p-5 flex flex-col gap-5 animate-fade-in">
       <h1 className="text-xl font-bold mb-4">Estimated Cost Report</h1>
 
       {/* Hero cost number */}
       <div>
         <div className="field-label mb-1">Total estimated cost · USD</div>
         <div
-          className="text-[56px] font-light leading-none tracking-tight"
+          key={Math.round(animatedCost / 10_000)}
+          className="text-[56px] font-light leading-none tracking-tight animate-number-flash"
           style={{ color: "#a63d2a", fontFamily: "'Inter Tight', sans-serif" }}
         >
-          ${(totalCost / 1_000_000).toFixed(2)}M
+          ${(animatedCost / 1_000_000).toFixed(2)}M
         </div>
         <div className="font-mono text-[10px] text-ink-faint mt-1.5">± 14% (90% CI)</div>
       </div>
@@ -54,19 +59,19 @@ export function IncidentReport() {
         className="grid grid-cols-2 gap-px"
         style={{ background: "rgba(0,0,0,0.1)" }}
       >
-        <StatCell label="Population at risk" value={popAtRisk.toLocaleString()} sub="downstream intakes" />
-        <StatCell label="Est. cleanup" value={`$${(liveCleanup / 1_000_000).toFixed(2)}M`} sub="remediation only" />
+        <StatCell label="Population at risk" value={animatedPop.toLocaleString()} sub="downstream intakes" />
+        <StatCell label="Est. cleanup" value={`$${(animatedCleanup / 1_000_000).toFixed(2)}M`} sub="remediation only" />
         {mitigationSpend > 0 && (
-          <StatCell label="Mitigation spend" value={`$${(mitigationSpend / 1_000_000).toFixed(2)}M`} sub="barriers placed" />
+          <StatCell label="Mitigation spend" value={`$${(animatedMitigation / 1_000_000).toFixed(2)}M`} sub="barriers placed" />
         )}
         {mitigationSpend > 0 && (
-          <StatCell label="Total cost" value={`$${(totalCost / 1_000_000).toFixed(2)}M`} sub="cleanup + mitigation" />
+          <StatCell label="Total cost" value={`$${(animatedCost / 1_000_000).toFixed(2)}M`} sub="cleanup + mitigation" />
         )}
       </div>
 
       {/* Narrative sections — only available after simulation completes */}
       {report && (
-        <>
+        <div className="flex flex-col gap-5 animate-slide-up">
           <div>
             <Subhead>Summary</Subhead>
             <p className="text-[13px] leading-relaxed text-ink">{report.executiveSummary}</p>
@@ -78,7 +83,8 @@ export function IncidentReport() {
               {report.mitigationPriorityList.map((item, i) => (
                 <li
                   key={i}
-                  className="flex gap-3 py-2 border-b border-dashed border-border last:border-0 text-[12px] leading-relaxed"
+                  className="flex gap-3 py-2 border-b border-dashed border-border last:border-0 text-[12px] leading-relaxed animate-slide-right"
+                  style={{ animationDelay: `${i * 60}ms` }}
                 >
                   <span
                     className="font-mono text-[10px] font-semibold shrink-0 pt-0.5"
@@ -98,7 +104,8 @@ export function IncidentReport() {
               {report.regulatoryObligations.map((item, i) => (
                 <li
                   key={i}
-                  className="flex gap-3 py-2 border-b border-dashed border-border last:border-0 text-[12px] leading-relaxed"
+                  className="flex gap-3 py-2 border-b border-dashed border-border last:border-0 text-[12px] leading-relaxed animate-slide-right"
+                  style={{ animationDelay: `${i * 60}ms` }}
                 >
                   <span className="text-ink-faint shrink-0 pt-0.5">·</span>
                   <span className="text-ink-dim">{item}</span>
@@ -108,10 +115,11 @@ export function IncidentReport() {
           </div>
 
           <div
-            className="p-3.5 font-mono text-[10px] leading-relaxed text-ink-dim"
+            className="p-3.5 font-mono text-[10px] leading-relaxed text-ink-dim animate-fade-in"
             style={{
               borderLeft: "3px solid #0e1a22",
               background: "#ebe6d6",
+              animationDelay: "200ms",
             }}
           >
             <div
@@ -124,7 +132,7 @@ export function IncidentReport() {
             EPCRA Emergency Release Notification to SERC / LEPC (40 CFR 355). CWA §311 notification
             to National Response Center 1-800-424-8802.
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -143,7 +151,7 @@ function StatCell({
     <div className="bg-bg p-3.5">
       <div className="field-label mb-1">{label}</div>
       <div
-        className="text-[22px] font-medium tracking-tight leading-none"
+        className="text-[22px] font-medium tracking-tight leading-none tabular-nums"
         style={{ fontFamily: "'Inter Tight', sans-serif" }}
       >
         {value}

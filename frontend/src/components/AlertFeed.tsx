@@ -12,7 +12,7 @@ export function AlertFeed() {
   const entries = useAlertStore((s) => s.entries);
 
   return (
-    <div className="p-5 flex flex-col gap-3">
+    <div className="p-5 flex flex-col gap-3 animate-fade-in">
       <div className="flex items-center justify-between mb-1">
         <span className="field-label">Alert feed</span>
       </div>
@@ -26,7 +26,7 @@ export function AlertFeed() {
           {entries.map((a) => (
             <div
               key={a.id}
-              className="flex items-start gap-2.5 py-1.5 border-b border-border last:border-0"
+              className="flex items-start gap-2.5 py-1.5 border-b border-border last:border-0 animate-slide-down"
             >
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0 mt-1"
@@ -38,7 +38,7 @@ export function AlertFeed() {
                     {a.townName}
                   </span>
                   <span className="font-mono text-[10px] text-ink-faint shrink-0">
-                    t+{a.tick}
+                    {a.tick}hr
                   </span>
                 </div>
                 <div className="font-mono text-[10px] text-ink-dim mt-0.5">

@@ -162,7 +162,7 @@ export function ControlPanel() {
                 "flex flex-col items-start py-2 px-2.5 rounded-sm border text-[10px] font-mono",
                 "transition-colors disabled:opacity-40",
                 armed
-                  ? "bg-bg-ribbon text-ink-ribbon border-bg-ribbon"
+                  ? "bg-bg-ribbon text-ink-ribbon border-bg-ribbon ring-1 ring-accent ring-offset-1 ring-offset-bg-panel animate-dot-pulse"
                   : "bg-transparent text-ink border-border hover:border-border-strong",
               ].join(" ")}
               title={
