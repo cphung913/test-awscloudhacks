@@ -10,10 +10,23 @@ export function TimeScrubber() {
   if (status === "idle" || totalTicks === 0) return null;
 
   return (
-    <div className="panel px-4 py-3 flex items-center gap-3">
-      <span className="font-mono text-[11px] text-ink-dim whitespace-nowrap">
-        t+{tick} / {totalTicks}
-      </span>
+    <div
+      className="px-5 py-3.5 border-t border-border"
+      style={{ background: "#f4f1e8" }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span
+          className="font-mono text-[9px] tracking-[0.14em] uppercase"
+          style={{ color: "rgba(0,0,0,0.6)" }}
+        >
+          Hydrograph · concentration at leading edge
+        </span>
+        <span className="font-mono text-[10px]" style={{ color: "#a63d2a" }}>
+          t+{tick.toString().padStart(2, "0")} / {totalTicks}
+          {status === "running" ? " · live" : status === "completed" ? " · scrub" : ""}
+        </span>
+      </div>
+
       <Slider
         value={tick}
         onChange={setTick}
@@ -22,9 +35,17 @@ export function TimeScrubber() {
         step={1}
         aria-label="tick scrubber"
       />
-      <span className="text-[11px] text-ink-faint whitespace-nowrap">
-        {status === "running" ? "live" : status === "completed" ? "scrub" : ""}
-      </span>
+
+      <div
+        className="flex justify-between mt-1.5 font-mono text-[9px]"
+        style={{ color: "rgba(0,0,0,0.4)" }}
+      >
+        <span>t+00</span>
+        <span>t+{Math.round(totalTicks * 0.25).toString().padStart(2, "0")}</span>
+        <span>t+{Math.round(totalTicks * 0.5).toString().padStart(2, "0")}</span>
+        <span>t+{Math.round(totalTicks * 0.75).toString().padStart(2, "0")}</span>
+        <span>t+{totalTicks}</span>
+      </div>
     </div>
   );
 }
