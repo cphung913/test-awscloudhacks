@@ -67,9 +67,11 @@ export function useSimulationDriver() {
     }
 
     // --- mock driver (used when VITE_APPSYNC_URL is unset or client not implemented) ---
-    if (!config.sourceLngLat) return;
+    // Fall back to a mid-Mississippi source (St. Louis area) if no pin has been placed,
+    // so the simulation always runs to completion and the incident report always renders.
+    const sourceLngLat: [number, number] = config.sourceLngLat ?? [-90.199, 38.627];
 
-    const river = generateSyntheticRiver(config.sourceLngLat, config.region);
+    const river = generateSyntheticRiver(sourceLngLat, config.region);
     const priorRisk = new Map<string, RiskLevel>();
     const firstCrossTick = new Map<string, number>();
     // Segments far enough beyond the plume that mockConcentrationAt will always

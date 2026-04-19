@@ -62,7 +62,7 @@ export function ControlPanel() {
   const armMitigation = useUiStore((s) => s.armMitigation);
   const cancel = useUiStore((s) => s.cancel);
 
-  const canSimulate = !!sourceSegmentId && status !== "running";
+  const canSimulate = status !== "running";
 
   return (
     <div className="p-5 flex flex-col gap-0">
@@ -209,7 +209,7 @@ export function ControlPanel() {
           className="btn-primary flex-1"
           disabled={!canSimulate}
           onClick={startSimulation}
-          title={!sourceSegmentId ? "Pin a source on the map first" : undefined}
+          title={!sourceSegmentId ? "No source pinned — will use default St. Louis location" : undefined}
         >
           {status === "running"
             ? "Running…"
