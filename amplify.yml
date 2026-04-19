@@ -6,7 +6,7 @@ frontend:
         - npm install
     build:
       commands:
-        - node_modules/.bin/vite build --root frontend
+        - frontend/node_modules/.bin/vite build --root frontend
   artifacts:
     baseDirectory: frontend/dist
     files:
