@@ -5,8 +5,6 @@ configure hazard / timing / budget, watch the plume propagate downstream in
 real time, and receive an EPA-style incident report authored by Claude via
 Amazon Bedrock.
 
-See [PLAN.md](./PLAN.md) for the full implementation plan.
-
 ## Layout
 
 - `frontend/` — Vite + React + TypeScript (strict) + MapLibre + Zustand.
@@ -28,10 +26,3 @@ python ml/dispersion-model/deploy.py
 aws s3 cp data/mississippi.geojson s3://$RIVER_GRAPHS_BUCKET/mississippi.geojson
 npm -w frontend run dev
 ```
-
-## Hard rules
-
-- Never hardcode ARNs, account IDs, or endpoint URLs. All come from CDK env vars.
-- TypeScript strict mode on everywhere.
-- Python Lambdas are 3.12, type-hinted, ruff-clean.
-- `prompts.py` must cite EPA 40 CFR Part 300.
